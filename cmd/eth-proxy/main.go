@@ -75,7 +75,9 @@ func initCommon() *proxy.Config {
 	if err != nil {
 		log.WithField("logLevel", config.GlobalConfig.LoggingLevel).Fatal("invalid logging level")
 	}
+
 	log.SetLevel(logLevel)
+
 	return config
 }
 
