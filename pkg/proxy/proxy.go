@@ -3,7 +3,6 @@ package proxy
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -73,7 +72,7 @@ func (p *Proxy) Serve() error {
 		p.Log.WithError(err).Fatal("can't start HTTP server")
 	}
 
-	return nil
+	return err
 }
 
 func newHTTPReverseProxy(targetHost string, proxyTimeoutSeconds uint) (*httputil.ReverseProxy, error) {
@@ -97,14 +96,20 @@ func (p *Proxy) proxyRequestHandler(proxy *httputil.ReverseProxy, upstreamName s
 		// Only allow GET methods for now
 		if r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)
-			io.WriteString(w, "METHOD NOT ALLOWED\n")
+			_, err := fmt.Fprintf(w, "METHOD NOT ALLOWED\n")
+			if err != nil {
+				p.Log.WithError(err).Error("failed writing to http.ResponseWriter")
+			}
 			return
 		}
 		// Check if path is allowed
 		match, _ := regexp.MatchString(p.beaconAllowedPathRegex, r.URL.Path)
 		if !match {
 			w.WriteHeader(http.StatusForbidden)
-			io.WriteString(w, "FORBIDDEN. Path is not allowed\n")
+			_, err := fmt.Fprintf(w, "FORBIDDEN. Path is not allowed\n")
+			if err != nil {
+				p.Log.WithError(err).Error("failed writing to http.ResponseWriter")
+			}
 			return
 		}
 		proxy.ServeHTTP(w, r)
@@ -127,6 +132,9 @@ func (p *Proxy) statusRequestHandler() func(http.ResponseWriter, *http.Request) 
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.Write(bytes)
+		_, err = w.Write(bytes)
+		if err != nil {
+			p.Log.WithError(err).Error("failed writing to status to http.ResponseWriter")
+		}
 	}
 }

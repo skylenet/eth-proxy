@@ -18,7 +18,9 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := initCommon()
 		p := proxy.NewProxy(log, cfg)
-		p.Serve()
+		if err := p.Serve(); err != nil {
+			log.WithError(err).Fatal("failed to serve proxy server")
+		}
 	},
 }
 

@@ -94,15 +94,15 @@ func (bm *BeaconMonitor) Check(upstreamName string) error {
 	bm.log.WithField("node", upstreamName).Debug("checking node")
 	version, err := bm.CheckNodeVersion(upstreamName)
 	if err != nil {
-		return errors.Wrap(err, "failed getting node version")
+		bm.log.WithField("upstream", upstreamName).WithError(err).Error("failed getting node version")
 	}
 	syncInfo, err := bm.CheckNodeSyncing(upstreamName)
 	if err != nil {
-		errors.Wrap(err, "failed getting node sync info")
+		bm.log.WithField("upstream", upstreamName).WithError(err).Error("failed getting node sync info")
 	}
 	peerCountInfo, err := bm.CheckNodePeerCount(upstreamName)
 	if err != nil {
-		errors.Wrap(err, "failed getting peer count info")
+		bm.log.WithField("upstream", upstreamName).WithError(err).Error("failed getting node peer count info")
 	}
 	now := time.Now().Unix()
 	bs := BeaconStatus{
