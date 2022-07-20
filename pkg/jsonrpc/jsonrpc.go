@@ -1,6 +1,8 @@
 package jsonrpc
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 const (
 	ErrorMethodNotFound = -32601
@@ -32,7 +34,7 @@ type RequestPayload struct {
 	Params  []json.RawMessage `json:"params"`
 }
 
-func NewJsonRPCResponseError(id json.RawMessage, errCode int, msg string) ResponseError {
+func NewJSONRPCResponseError(id json.RawMessage, errCode int, msg string) ResponseError {
 	return ResponseError{
 		Version: "2.0",
 		ID:      id,

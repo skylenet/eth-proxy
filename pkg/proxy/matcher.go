@@ -17,6 +17,7 @@ func NewAllowMatcher(rules []string) Matcher {
 			r += "|"
 		}
 	}
+
 	return Matcher{
 		rules: r,
 	}

@@ -1,6 +1,6 @@
 global:
   listenAddr: ":5555"
-  logging: "trace"  # panic,fatal,warm,info,debug,trace
+  logging: "trace" # panic,fatal,warm,info,debug,trace
 
 #
 # Configuration for the beacon API upstreams
@@ -9,23 +9,19 @@ beacon:
   proxyTimeoutSeconds: 30
   apiAllowPaths:
     #- .*
-    - "^/eth/v1/node/identity$"
-    - "^/eth/v1/node/peer_count$"
-    - "^/eth/v1/node/version$"
-    - "^/eth/v1/node/syncing$"
+    - ^/eth/v1/node/identity$
+    - ^/eth/v1/node/peer_count$
+    - ^/eth/v1/node/version$
+    - ^/eth/v1/node/syncing$
+    #
+    - ^/eth/v1/beacon/blocks/genesis/root$
+    - ^/eth/v2/beacon/blocks/finalized$
   upstreams:
   - name: node1
     address: http://localhost:5052
   - name: node2
     address: http://localhost:5053
-  - name: node3
-    address: http://localhost:5054
-  - name: node4
-    address: http://localhost:5055
-  - name: node5
-    address: http://localhost:5056
-  - name: node6
-    address: http://localhost:5057
+
 
 #
 # Configuration for the execution RPC API upstreams
@@ -57,11 +53,12 @@ execution:
     - "eth_newPendingTransactionFilter"
     - "eth_sendRawTransaction"
     - "eth_subscribe"
-    #- "eth_syncing"
+    - "eth_syncing"
     - "eth_uninstallFilter"
     - "eth_unsubscribe"
     - "net_listening"
     - "net_version"
+    - "net_peerCount"
     - "rpc_modules"
     - "web3_clientVersion"
   upstreams:

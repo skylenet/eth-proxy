@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -26,7 +26,8 @@ type Proxy struct {
 }
 
 type Monitors struct {
-	BeaconMonitor *BeaconMonitor
+	BeaconMonitor    *BeaconMonitor
+	ExecutionMonitor *ExecutionMonitor
 }
 
 func NewProxy(log *logrus.Logger, conf *Config) *Proxy {
@@ -35,11 +36,13 @@ func NewProxy(log *logrus.Logger, conf *Config) *Proxy {
 	}
 
 	bm := NewBeaconMonitor(log, conf.BeaconUpstreams)
+	em := NewExecutionMonitor(log, conf.ExecutionUpstreams)
 	p := &Proxy{
 		Cfg: *conf,
 		Log: log,
 		Monitors: Monitors{
-			BeaconMonitor: bm,
+			BeaconMonitor:    bm,
+			ExecutionMonitor: em,
 		},
 	}
 
@@ -135,37 +138,44 @@ func (p *Proxy) beaconProxyRequestHandler(proxy *httputil.ReverseProxy, upstream
 func (p *Proxy) executionProxyRequestHandler(proxy *httputil.ReverseProxy, upstreamName string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+
 		r.URL.Path = strings.ReplaceAll(r.URL.Path, fmt.Sprintf("/proxy/execution/%s", upstreamName), "")
 
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			p.Log.WithError(err).Error("failed reading rpc body")
 			w.WriteHeader(http.StatusInternalServerError)
-			err := json.NewEncoder(w).Encode(jsonrpc.NewJsonRPCResponseError(json.RawMessage("1"), jsonrpc.ErrorInternal, "server error"))
+
+			err = json.NewEncoder(w).Encode(jsonrpc.NewJSONRPCResponseError(json.RawMessage("1"), jsonrpc.ErrorInternal, "server error"))
 			if err != nil {
 				p.Log.WithError(err).Error("failed writing to http.ResponseWriter.1")
 			}
+
 			return
 		}
 
 		method, err := parseRPCPayload(body)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			err := json.NewEncoder(w).Encode(jsonrpc.NewJsonRPCResponseError(json.RawMessage("1"), jsonrpc.ErrorInvalidParams, err.Error()))
+
+			err = json.NewEncoder(w).Encode(jsonrpc.NewJSONRPCResponseError(json.RawMessage("1"), jsonrpc.ErrorInvalidParams, err.Error()))
 			if err != nil {
 				p.Log.WithError(err).Error("failed writing to http.ResponseWriter.2")
 			}
+
 			return
 		}
 
-		r.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+		r.Body = io.NopCloser(bytes.NewBuffer(body))
 
 		if !p.executionRPCMethodsMatcher.Matches(method) {
 			w.WriteHeader(http.StatusForbidden)
-			err := json.NewEncoder(w).Encode(jsonrpc.NewJsonRPCResponseError(json.RawMessage("1"), jsonrpc.ErrorMethodNotFound, "method not allowed"))
+
+			err := json.NewEncoder(w).Encode(jsonrpc.NewJSONRPCResponseError(json.RawMessage("1"), jsonrpc.ErrorMethodNotFound, "method not allowed"))
 			if err != nil {
 				p.Log.WithError(err).Error("failed writing to http.ResponseWriter.3")
 			}
+
 			return
 		}
 
@@ -178,18 +188,20 @@ func (p *Proxy) statusRequestHandler() func(http.ResponseWriter, *http.Request) 
 		w.Header().Add("Content-Type", "application/json")
 
 		resp := struct {
-			Beacon map[string]BeaconStatus `json:"beaconNodes"`
+			Beacon    map[string]BeaconStatus    `json:"beacon_nodes"`
+			Execution map[string]ExecutionStatus `json:"execution_nodes"`
 		}{
-			Beacon: p.Monitors.BeaconMonitor.status,
+			Beacon:    p.Monitors.BeaconMonitor.status,
+			Execution: p.Monitors.ExecutionMonitor.status,
 		}
 
-		bytes, err := json.Marshal(resp)
+		b, err := json.Marshal(resp)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		_, err = w.Write(bytes)
+		_, err = w.Write(b)
 		if err != nil {
 			p.Log.WithError(err).Error("failed writing to status to http.ResponseWriter")
 		}
