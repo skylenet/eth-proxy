@@ -1,6 +1,6 @@
 # eth-proxy
 
-Reverse proxy to ethereum nodes. Currently just working for beacon nodes.
+Reverse proxy for ethereum nodes.
 
 ### Features:
 - Status endpoint for all your beacon nodes
@@ -17,7 +17,16 @@ curl http://localhost:5555/status
 
 Reverse proxy to a specific node by name
 ```sh
+# Beacon HTTP API
 curl http://localhost:5555/proxy/beacon/node1/eth/v1/node/identity
+
+# Execution JSONRPC API
+curl -X POST 'localhost:5555/proxy/execution/node1/' --header 'Content-Type: application/json' --data-raw '{
+        "jsonrpc":"2.0",
+        "method":"eth_blockNumber",
+        "params":[],
+        "id":1
+}'
 ```
 
 
