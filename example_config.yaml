@@ -1,6 +1,10 @@
 global:
   listenAddr: ":5555"
   logging: "trace"  # panic,fatal,warm,info,debug,trace
+
+#
+# Configuration for the beacon API upstreams
+#
 beacon:
   proxyTimeoutSeconds: 30
   apiAllowPaths:
@@ -22,3 +26,46 @@ beacon:
     address: http://localhost:5056
   - name: node6
     address: http://localhost:5057
+
+#
+# Configuration for the execution RPC API upstreams
+#
+execution:
+  proxyTimeoutSeconds: 30
+  rpcAllowMethods:
+    - "eth_blockNumber"
+    - "eth_call"
+    - "eth_chainId"
+    - "eth_estimateGas"
+    - "eth_feeHistory"
+    - "eth_gasPrice"
+    - "eth_getBalance"
+    - "eth_getBlockByHash"
+    - "eth_getBlockByNumber"
+    - "eth_getBlockTransactionCountByHash"
+    - "eth_getBlockTransactionCountByNumber"
+    - "eth_getCode"
+    - "eth_getFilterChanges"
+    - "eth_getLogs"
+    - "eth_getStorageAt"
+    - "eth_getTransactionByBlockHashAndIndex"
+    - "eth_getTransactionByBlockNumberAndIndex"
+    - "eth_getTransactionByHash"
+    - "eth_getTransactionCount"
+    - "eth_getTransactionReceipt"
+    - "eth_newBlockFilter"
+    - "eth_newPendingTransactionFilter"
+    - "eth_sendRawTransaction"
+    - "eth_subscribe"
+    #- "eth_syncing"
+    - "eth_uninstallFilter"
+    - "eth_unsubscribe"
+    - "net_listening"
+    - "net_version"
+    - "rpc_modules"
+    - "web3_clientVersion"
+  upstreams:
+  - name: node1
+    address: http://localhost:8545
+  - name: node2
+    address: http://localhost:8546
