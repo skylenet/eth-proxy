@@ -128,7 +128,7 @@ func (em *ExecutionMonitor) CheckNodeSyncing(upstreamName string) (bool, error) 
 	}
 
 	var result bool
-	err = client.Call(&result, "eth_syncing", nil)
+	err = client.Call(&result, "eth_syncing")
 
 	return result, err
 }
@@ -143,7 +143,7 @@ func (em *ExecutionMonitor) CheckNodeHeadBlock(upstreamName string) (uint64, err
 
 	var result string
 
-	err = client.Call(&result, "eth_blockNumber", nil)
+	err = client.Call(&result, "eth_blockNumber")
 	if err != nil {
 		return 0, err
 	}
@@ -166,7 +166,7 @@ func (em *ExecutionMonitor) CheckNodechainID(upstreamName string) (uint64, error
 
 	var result string
 
-	err = client.Call(&result, "eth_chainID", nil)
+	err = client.Call(&result, "eth_chainId")
 	if err != nil {
 		return 0, err
 	}
@@ -189,7 +189,7 @@ func (em *ExecutionMonitor) CheckNodePeerCount(upstreamName string) (uint64, err
 
 	var result string
 
-	err = client.Call(&result, "net_peerCount", nil)
+	err = client.Call(&result, "net_peerCount")
 	if err != nil {
 		return 0, err
 	}

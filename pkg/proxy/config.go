@@ -31,8 +31,9 @@ type BeaconUpstream struct {
 }
 
 type ExecutionUpstream struct {
-	Name    string `yaml:"name"`
-	Address string `yaml:"address"`
+	Name      string `yaml:"name"`
+	Address   string `yaml:"address"`
+	WsAddress string `yaml:"wsAddress"`
 }
 
 func (c *Config) Validate() error {

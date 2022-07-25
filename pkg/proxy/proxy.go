@@ -137,9 +137,23 @@ func (p *Proxy) beaconProxyRequestHandler(proxy *httputil.ReverseProxy, upstream
 
 func (p *Proxy) executionProxyRequestHandler(proxy *httputil.ReverseProxy, upstreamName string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-
 		r.URL.Path = strings.ReplaceAll(r.URL.Path, fmt.Sprintf("/proxy/execution/%s", upstreamName), "")
+
+		// Detect if websocket connection
+		if r.Header.Get("upgrade") == "websocket" {
+			wsUpstream := ""
+			for _, node := range p.Cfg.ExecutionConfig.ExecutionUpstreams {
+				if node.Name == upstreamName {
+					wsUpstream = node.WsAddress
+				}
+			}
+			u, _ := url.Parse(wsUpstream)
+			wsp := NewWebsocketProxy(p.Log, u)
+			wsp.ServeHTTP(w, r)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {

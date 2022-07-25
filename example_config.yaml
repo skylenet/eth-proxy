@@ -64,5 +64,7 @@ execution:
   upstreams:
   - name: node1
     address: http://localhost:8545
+    wsAddress: ws://localhost:8546
   - name: node2
-    address: http://localhost:8546
+    address: http://localhost:9545
+    wsAddress: ws://localhost:9546
