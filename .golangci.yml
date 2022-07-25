@@ -1,6 +1,14 @@
 linters-settings:
   errcheck:
     check-type-assertions: true
+    # List of functions to exclude from checking, where each entry is a single function to exclude.
+    # See https://github.com/kisielk/errcheck#excluding-functions for details.
+    exclude-functions:
+      - io/ioutil.ReadFile
+      - io.Copy(*bytes.Buffer)
+      - io.Copy(os.Stdout)
+      - (*github.com/gorilla/websocket.Conn).WriteMessage
+
   goconst:
     min-len: 2
     min-occurrences: 3
@@ -55,3 +63,7 @@ linters:
 
 run:
   issues-exit-code: 1
+
+issues:
+  exclude:
+    - declaration of "(err|ctx)" shadows declaration at
