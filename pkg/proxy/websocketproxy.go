@@ -29,7 +29,8 @@ var (
 // WebsocketProxy is an HTTP Handler that takes an incoming WebSocket
 // connection and proxies it to another server.
 type WebsocketProxy struct {
-	Log *logrus.Logger
+	Log              *logrus.Logger
+	messageProcessor WebsocketMessageProcessor
 	// Director, if non-nil, is a function that may copy additional request
 	// headers from the incoming WebSocket connection into the output headers
 	// which will be forwarded to another server.
@@ -51,7 +52,7 @@ type WebsocketProxy struct {
 
 // NewProxy returns a new Websocket reverse proxy that rewrites the
 // URL's to the scheme, host and base path provider in target.
-func NewWebsocketProxy(log *logrus.Logger, target *url.URL) *WebsocketProxy {
+func NewWebsocketProxy(log *logrus.Logger, target *url.URL, msgProcessor WebsocketMessageProcessor) *WebsocketProxy {
 	backend := func(r *http.Request) *url.URL {
 		// Shallow copy
 		u := *target
@@ -62,7 +63,11 @@ func NewWebsocketProxy(log *logrus.Logger, target *url.URL) *WebsocketProxy {
 		return &u
 	}
 
-	return &WebsocketProxy{Log: log, Backend: backend}
+	return &WebsocketProxy{
+		Log:              log,
+		Backend:          backend,
+		messageProcessor: msgProcessor,
+	}
 }
 
 // ServeHTTP implements the http.Handler that proxies WebSocket connections.
@@ -70,6 +75,7 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if w.Backend == nil {
 		w.Log.Println("websocketproxy: backend function is not defined")
 		http.Error(rw, "internal server error (code: 1)", http.StatusInternalServerError)
+
 		return
 	}
 
@@ -77,6 +83,7 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if backendURL == nil {
 		w.Log.Println("websocketproxy: backend URL is nil")
 		http.Error(rw, "internal server error (code: 2)", http.StatusInternalServerError)
+
 		return
 	}
 
@@ -155,6 +162,7 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		} else {
 			http.Error(rw, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 		}
+
 		return
 	}
 	defer connBackend.Close()
@@ -186,61 +194,9 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	errClient := make(chan error, 1)
 	errBackend := make(chan error, 1)
-	replicateWebsocketConn := func(dst, src *websocket.Conn, isClientRequest bool, errc chan error) {
-		for {
-			msgType, msg, err := src.ReadMessage()
 
-			if err != nil {
-				w.Log.WithError(err).Error("websocket error while reading message")
-				m := websocket.FormatCloseMessage(websocket.CloseNormalClosure, err.Error())
-
-				if e, ok := err.(*websocket.CloseError); ok {
-					if e.Code != websocket.CloseNoStatusReceived {
-						m = websocket.FormatCloseMessage(e.Code, e.Text)
-					}
-				}
-				errc <- err
-
-				dst.WriteMessage(websocket.CloseMessage, m)
-
-				break
-			}
-
-			if isClientRequest {
-				method, err := parseRPCPayload(msg)
-				if err != nil {
-					errc <- err
-
-					err = src.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, err.Error()))
-					if err != nil {
-						errc <- err
-					}
-
-					break
-				}
-
-				if method != "eth_blockNumber" {
-					resp, err := json.Marshal(jsonrpc.NewJSONRPCResponseError(json.RawMessage("1"), jsonrpc.ErrorMethodNotFound, "method not allowed"))
-					if err != nil {
-						w.Log.WithError(err).Error("failed writing to http.ResponseWriter.3")
-					}
-
-					src.WriteMessage(websocket.TextMessage, resp)
-
-					continue
-				}
-			}
-
-			err = dst.WriteMessage(msgType, msg)
-			if err != nil {
-				errc <- err
-				break
-			}
-		}
-	}
-
-	go replicateWebsocketConn(connPub, connBackend, false, errClient)
-	go replicateWebsocketConn(connBackend, connPub, true, errBackend)
+	go w.replicateWebsocketConn(connPub, connBackend, false, errClient)
+	go w.replicateWebsocketConn(connBackend, connPub, true, errBackend)
 
 	var message string
 	select {
@@ -252,6 +208,34 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	if e, ok := err.(*websocket.CloseError); !ok || e.Code == websocket.CloseAbnormalClosure {
 		w.Log.Printf(message, err)
+	}
+}
+
+func (w *WebsocketProxy) replicateWebsocketConn(dst, src *websocket.Conn, isClientRequest bool, errc chan error) {
+	for {
+		msgType, msg, err := src.ReadMessage()
+
+		if err != nil {
+			w.Log.WithError(err).Error("websocket error while reading message")
+			m := websocket.FormatCloseMessage(websocket.CloseNormalClosure, err.Error())
+
+			if e, ok := err.(*websocket.CloseError); ok {
+				if e.Code != websocket.CloseNoStatusReceived {
+					m = websocket.FormatCloseMessage(e.Code, e.Text)
+				}
+			}
+			errc <- err
+
+			dst.WriteMessage(websocket.CloseMessage, m)
+
+			break
+		}
+
+		if isClientRequest {
+			w.messageProcessor.ProcessClientToServer(msgType, msg, dst, src, errc)
+		} else {
+			w.messageProcessor.ProcessServerToClient(msgType, msg, dst, errc)
+		}
 	}
 }
 
@@ -270,5 +254,74 @@ func copyResponse(rw http.ResponseWriter, resp *http.Response) error {
 	defer resp.Body.Close()
 
 	_, err := io.Copy(rw, resp.Body)
+
 	return err
+}
+
+////////////////////////////////////
+type WebsocketMessageProcessor interface {
+	ProcessClientToServer(msgType int, msg []byte, dst, src *websocket.Conn, errc chan error)
+	ProcessServerToClient(msgType int, msg []byte, dst *websocket.Conn, errc chan error)
+}
+
+type DefaultWebsocketMessageProcessor struct{}
+
+func (p *DefaultWebsocketMessageProcessor) ProcessClientToServer(msgType int, msg []byte, dst, src *websocket.Conn, errc chan error) {
+	err := dst.WriteMessage(msgType, msg)
+	if err != nil {
+		errc <- err
+	}
+}
+
+func (p *DefaultWebsocketMessageProcessor) ProcessServerToClient(msgType int, msg []byte, dst *websocket.Conn, errc chan error) {
+	err := dst.WriteMessage(msgType, msg)
+	if err != nil {
+		errc <- err
+	}
+}
+
+////
+
+type RPCWebsocketMessageProcessor struct {
+	executionRPCMethodsMatcher Matcher
+}
+
+func NewRPCWebsocketMessageProcessor(matcher Matcher) *RPCWebsocketMessageProcessor {
+	return &RPCWebsocketMessageProcessor{
+		executionRPCMethodsMatcher: matcher,
+	}
+}
+
+func (p *RPCWebsocketMessageProcessor) ProcessClientToServer(msgType int, msg []byte, dst, src *websocket.Conn, errc chan error) {
+	method, err := parseRPCPayload(msg)
+	if err != nil {
+		errc <- err
+
+		err = src.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, err.Error()))
+		if err != nil {
+			errc <- err
+		}
+
+		return
+	}
+
+	if !p.executionRPCMethodsMatcher.Matches(method) {
+		resp, _ := json.Marshal(jsonrpc.NewJSONRPCResponseError(json.RawMessage("1"), jsonrpc.ErrorMethodNotFound, "method not allowed"))
+
+		src.WriteMessage(websocket.TextMessage, resp)
+
+		return
+	}
+
+	err = dst.WriteMessage(msgType, msg)
+	if err != nil {
+		errc <- err
+	}
+}
+
+func (p *RPCWebsocketMessageProcessor) ProcessServerToClient(msgType int, msg []byte, dst *websocket.Conn, errc chan error) {
+	err := dst.WriteMessage(msgType, msg)
+	if err != nil {
+		errc <- err
+	}
 }

@@ -150,7 +150,7 @@ func (p *Proxy) executionProxyRequestHandler(proxy *httputil.ReverseProxy, upstr
 			}
 
 			u, _ := url.Parse(wsUpstream)
-			wsp := NewWebsocketProxy(p.Log, u)
+			wsp := NewWebsocketProxy(p.Log, u, NewRPCWebsocketMessageProcessor(p.executionRPCMethodsMatcher))
 			wsp.ServeHTTP(w, r)
 
 			return
