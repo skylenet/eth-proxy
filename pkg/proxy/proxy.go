@@ -142,14 +142,17 @@ func (p *Proxy) executionProxyRequestHandler(proxy *httputil.ReverseProxy, upstr
 		// Detect if websocket connection
 		if r.Header.Get("upgrade") == "websocket" {
 			wsUpstream := ""
+
 			for _, node := range p.Cfg.ExecutionConfig.ExecutionUpstreams {
 				if node.Name == upstreamName {
 					wsUpstream = node.WsAddress
 				}
 			}
+
 			u, _ := url.Parse(wsUpstream)
 			wsp := NewWebsocketProxy(p.Log, u)
 			wsp.ServeHTTP(w, r)
+
 			return
 		}
 

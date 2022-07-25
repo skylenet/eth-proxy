@@ -3,7 +3,6 @@ package proxy
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -59,8 +58,10 @@ func NewWebsocketProxy(log *logrus.Logger, target *url.URL) *WebsocketProxy {
 		u.Fragment = r.URL.Fragment
 		u.Path = r.URL.Path
 		u.RawQuery = r.URL.RawQuery
+
 		return &u
 	}
+
 	return &WebsocketProxy{Log: log, Backend: backend}
 }
 
@@ -87,15 +88,19 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// Pass headers from the incoming request to the dialer to forward them to
 	// the final destinations.
 	requestHeader := http.Header{}
+
 	if origin := req.Header.Get("Origin"); origin != "" {
 		requestHeader.Add("Origin", origin)
 	}
+
 	for _, prot := range req.Header[http.CanonicalHeaderKey("Sec-WebSocket-Protocol")] {
 		requestHeader.Add("Sec-WebSocket-Protocol", prot)
 	}
+
 	for _, cookie := range req.Header[http.CanonicalHeaderKey("Cookie")] {
 		requestHeader.Add("Cookie", cookie)
 	}
+
 	if req.Host != "" {
 		requestHeader.Set("Host", req.Host)
 	}
@@ -111,6 +116,7 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		if prior, ok := req.Header["X-Forwarded-For"]; ok {
 			clientIP = strings.Join(prior, ", ") + ", " + clientIP
 		}
+
 		requestHeader.Set("X-Forwarded-For", clientIP)
 	}
 
@@ -118,6 +124,7 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// be terminated on our site and because we doing proxy adding this would
 	// be helpful for applications on the backend.
 	requestHeader.Set("X-Forwarded-Proto", "http")
+
 	if req.TLS != nil {
 		requestHeader.Set("X-Forwarded-Proto", "https")
 	}
@@ -137,11 +144,12 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	connBackend, resp, err := dialer.Dial(backendURL.String(), requestHeader)
 	if err != nil {
 		w.Log.Printf("websocketproxy: couldn't dial to remote backend url %s, %s", backendURL.String(), err)
+
 		if resp != nil {
 			// If the WebSocket handshake fails, ErrBadHandshake is returned
 			// along with a non-nil *http.Response so that callers can handle
 			// redirects, authentication, etcetera.
-			if err := copyResponse(rw, resp); err != nil {
+			if err = copyResponse(rw, resp); err != nil {
 				w.Log.Printf("websocketproxy: couldn't write response after failed remote backend handshake: %s", err)
 			}
 		} else {
@@ -158,9 +166,11 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	// Only pass those headers to the upgrader.
 	upgradeHeader := http.Header{}
+
 	if hdr := resp.Header.Get("Sec-Websocket-Protocol"); hdr != "" {
 		upgradeHeader.Set("Sec-Websocket-Protocol", hdr)
 	}
+
 	if hdr := resp.Header.Get("Set-Cookie"); hdr != "" {
 		upgradeHeader.Set("Set-Cookie", hdr)
 	}
@@ -182,14 +192,17 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 			if err != nil {
 				w.Log.WithError(err).Error("websocket error while reading message")
-				m := websocket.FormatCloseMessage(websocket.CloseNormalClosure, fmt.Sprintf("%v", err))
+				m := websocket.FormatCloseMessage(websocket.CloseNormalClosure, err.Error())
+
 				if e, ok := err.(*websocket.CloseError); ok {
 					if e.Code != websocket.CloseNoStatusReceived {
 						m = websocket.FormatCloseMessage(e.Code, e.Text)
 					}
 				}
 				errc <- err
+
 				dst.WriteMessage(websocket.CloseMessage, m)
+
 				break
 			}
 
@@ -197,18 +210,23 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				method, err := parseRPCPayload(msg)
 				if err != nil {
 					errc <- err
-					err = src.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, fmt.Sprintf("%v", err)))
+
+					err = src.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, err.Error()))
 					if err != nil {
 						errc <- err
 					}
+
 					break
 				}
+
 				if method != "eth_blockNumber" {
 					resp, err := json.Marshal(jsonrpc.NewJSONRPCResponseError(json.RawMessage("1"), jsonrpc.ErrorMethodNotFound, "method not allowed"))
 					if err != nil {
 						w.Log.WithError(err).Error("failed writing to http.ResponseWriter.3")
 					}
+
 					src.WriteMessage(websocket.TextMessage, resp)
+
 					continue
 				}
 			}
@@ -230,8 +248,8 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		message = "websocketproxy: Error when copying from backend to client: %v"
 	case err = <-errBackend:
 		message = "websocketproxy: Error when copying from client to backend: %v"
-
 	}
+
 	if e, ok := err.(*websocket.CloseError); !ok || e.Code == websocket.CloseAbnormalClosure {
 		w.Log.Printf(message, err)
 	}
@@ -248,6 +266,7 @@ func copyHeader(dst, src http.Header) {
 func copyResponse(rw http.ResponseWriter, resp *http.Response) error {
 	copyHeader(rw.Header(), resp.Header)
 	rw.WriteHeader(resp.StatusCode)
+
 	defer resp.Body.Close()
 
 	_, err := io.Copy(rw, resp.Body)
