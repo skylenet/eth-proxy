@@ -6,14 +6,13 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 type ExecutionMonitor struct {
 	mu        sync.Mutex
 	upstreams map[string]ExecutionUpstream
 	status    map[string]ExecutionStatus
-	log       *logrus.Logger
 }
 
 type ExecutionStatus struct {
@@ -24,7 +23,7 @@ type ExecutionStatus struct {
 	LastCheck int64  `json:"last_check"`
 }
 
-func NewExecutionMonitor(log *logrus.Logger, upstreams []ExecutionUpstream) *ExecutionMonitor {
+func NewExecutionMonitor(upstreams []ExecutionUpstream) *ExecutionMonitor {
 	targets := make(map[string]ExecutionUpstream)
 	status := make(map[string]ExecutionStatus)
 
@@ -36,7 +35,6 @@ func NewExecutionMonitor(log *logrus.Logger, upstreams []ExecutionUpstream) *Exe
 	em := ExecutionMonitor{
 		upstreams: targets,
 		status:    status,
-		log:       log,
 	}
 
 	em.CheckAll()
@@ -59,7 +57,7 @@ func NewExecutionMonitor(log *logrus.Logger, upstreams []ExecutionUpstream) *Exe
 }
 
 func (em *ExecutionMonitor) CheckAll() {
-	em.log.WithField("count", len(em.upstreams)).Debug("checking all execution nodes")
+	log.WithField("count", len(em.upstreams)).Debug("checking all execution nodes")
 
 	var wg sync.WaitGroup
 
@@ -70,7 +68,7 @@ func (em *ExecutionMonitor) CheckAll() {
 			err := em.Check(upstreamName)
 
 			if err != nil {
-				em.log.WithField("upstream", upstreamName).WithError(err).Error("failed checking execution node")
+				log.WithField("upstream", upstreamName).WithError(err).Error("failed checking execution node")
 			}
 
 			wg.Done()
@@ -81,26 +79,26 @@ func (em *ExecutionMonitor) CheckAll() {
 }
 
 func (em *ExecutionMonitor) Check(upstreamName string) error {
-	em.log.WithField("node", upstreamName).Debug("checking execution node")
+	log.WithField("node", upstreamName).Debug("checking execution node")
 
 	syncing, err := em.CheckNodeSyncing(upstreamName)
 	if err != nil {
-		em.log.WithField("upstream", upstreamName).WithError(err).Error("failed getting execution node sync info")
+		log.WithField("upstream", upstreamName).WithError(err).Error("failed getting execution node sync info")
 	}
 
 	headBlock, err := em.CheckNodeHeadBlock(upstreamName)
 	if err != nil {
-		em.log.WithField("upstream", upstreamName).WithError(err).Error("failed getting execution node head block")
+		log.WithField("upstream", upstreamName).WithError(err).Error("failed getting execution node head block")
 	}
 
 	chainID, err := em.CheckNodechainID(upstreamName)
 	if err != nil {
-		em.log.WithField("upstream", upstreamName).WithError(err).Error("failed getting execution node chain id")
+		log.WithField("upstream", upstreamName).WithError(err).Error("failed getting execution node chain id")
 	}
 
 	peerCount, err := em.CheckNodePeerCount(upstreamName)
 	if err != nil {
-		em.log.WithField("upstream", upstreamName).WithError(err).Error("failed getting execution node peer count")
+		log.WithField("upstream", upstreamName).WithError(err).Error("failed getting execution node peer count")
 	}
 
 	now := time.Now().Unix()

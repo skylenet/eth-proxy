@@ -10,8 +10,9 @@ import (
 	"strings"
 
 	"github.com/gorilla/websocket"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/skylenet/eth-proxy/pkg/jsonrpc"
+	"github.com/skylenet/eth-proxy/pkg/matcher"
 )
 
 var (
@@ -29,7 +30,6 @@ var (
 // WebsocketProxy is an HTTP Handler that takes an incoming WebSocket
 // connection and proxies it to another server.
 type WebsocketProxy struct {
-	Log              *logrus.Logger
 	messageProcessor WebsocketMessageProcessor
 	// Director, if non-nil, is a function that may copy additional request
 	// headers from the incoming WebSocket connection into the output headers
@@ -52,7 +52,7 @@ type WebsocketProxy struct {
 
 // NewProxy returns a new Websocket reverse proxy that rewrites the
 // URL's to the scheme, host and base path provider in target.
-func NewWebsocketProxy(log *logrus.Logger, target *url.URL, msgProcessor WebsocketMessageProcessor) *WebsocketProxy {
+func NewWebsocketProxy(target *url.URL, msgProcessor WebsocketMessageProcessor) *WebsocketProxy {
 	backend := func(r *http.Request) *url.URL {
 		// Shallow copy
 		u := *target
@@ -64,7 +64,6 @@ func NewWebsocketProxy(log *logrus.Logger, target *url.URL, msgProcessor Websock
 	}
 
 	return &WebsocketProxy{
-		Log:              log,
 		Backend:          backend,
 		messageProcessor: msgProcessor,
 	}
@@ -73,7 +72,7 @@ func NewWebsocketProxy(log *logrus.Logger, target *url.URL, msgProcessor Websock
 // ServeHTTP implements the http.Handler that proxies WebSocket connections.
 func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if w.Backend == nil {
-		w.Log.Println("websocketproxy: backend function is not defined")
+		log.Println("websocketproxy: backend function is not defined")
 		http.Error(rw, "internal server error (code: 1)", http.StatusInternalServerError)
 
 		return
@@ -81,7 +80,7 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	backendURL := w.Backend(req)
 	if backendURL == nil {
-		w.Log.Println("websocketproxy: backend URL is nil")
+		log.Println("websocketproxy: backend URL is nil")
 		http.Error(rw, "internal server error (code: 2)", http.StatusInternalServerError)
 
 		return
@@ -150,14 +149,14 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// http://tools.ietf.org/html/draft-ietf-hybi-websocket-multiplexing-01
 	connBackend, resp, err := dialer.Dial(backendURL.String(), requestHeader)
 	if err != nil {
-		w.Log.Printf("websocketproxy: couldn't dial to remote backend url %s, %s", backendURL.String(), err)
+		log.Printf("websocketproxy: couldn't dial to remote backend url %s, %s", backendURL.String(), err)
 
 		if resp != nil {
 			// If the WebSocket handshake fails, ErrBadHandshake is returned
 			// along with a non-nil *http.Response so that callers can handle
 			// redirects, authentication, etcetera.
 			if err = copyResponse(rw, resp); err != nil {
-				w.Log.Printf("websocketproxy: couldn't write response after failed remote backend handshake: %s", err)
+				log.Printf("websocketproxy: couldn't write response after failed remote backend handshake: %s", err)
 			}
 		} else {
 			http.Error(rw, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
@@ -187,7 +186,7 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// Also pass the header that we gathered from the Dial handshake.
 	connPub, err := upgrader.Upgrade(rw, req, upgradeHeader)
 	if err != nil {
-		w.Log.Printf("websocketproxy: couldn't upgrade %s", err)
+		log.Printf("websocketproxy: couldn't upgrade %s", err)
 		return
 	}
 	defer connPub.Close()
@@ -207,7 +206,7 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if e, ok := err.(*websocket.CloseError); !ok || e.Code == websocket.CloseAbnormalClosure {
-		w.Log.Printf(message, err)
+		log.Printf(message, err)
 	}
 }
 
@@ -216,7 +215,7 @@ func (w *WebsocketProxy) replicateWebsocketConn(dst, src *websocket.Conn, isClie
 		msgType, msg, err := src.ReadMessage()
 
 		if err != nil {
-			w.Log.WithError(err).Error("websocket error while reading message")
+			log.WithError(err).Error("websocket error while reading message")
 			m := websocket.FormatCloseMessage(websocket.CloseNormalClosure, err.Error())
 
 			if e, ok := err.(*websocket.CloseError); ok {
@@ -283,10 +282,10 @@ func (p *DefaultWebsocketMessageProcessor) ProcessServerToClient(msgType int, ms
 ////
 
 type RPCWebsocketMessageProcessor struct {
-	executionRPCMethodsMatcher Matcher
+	executionRPCMethodsMatcher matcher.Matcher
 }
 
-func NewRPCWebsocketMessageProcessor(matcher Matcher) *RPCWebsocketMessageProcessor {
+func NewRPCWebsocketMessageProcessor(matcher matcher.Matcher) *RPCWebsocketMessageProcessor {
 	return &RPCWebsocketMessageProcessor{
 		executionRPCMethodsMatcher: matcher,
 	}
