@@ -31,6 +31,7 @@ type Backend struct {
 }
 
 type Config struct {
+	URL                        *url.URL
 	ProxyTimeoutSeconds        uint
 	HealthCheckIntervalSeconds uint
 	APIAllowPaths              []string
@@ -55,7 +56,7 @@ type PeerCountInfo struct {
 	Connected    int `json:"connected"`
 }
 
-func NewBackend(url url.URL, cfg Config) *Backend {
+func NewBackend(cfg Config) *Backend {
 	if cfg.HealthCheckIntervalSeconds == 0 {
 		cfg.HealthCheckIntervalSeconds = defaultHealthCheckIntervalSeconds
 	}
@@ -64,7 +65,7 @@ func NewBackend(url url.URL, cfg Config) *Backend {
 	}
 
 	b := Backend{
-		url:     url,
+		url:     *cfg.URL,
 		isAlive: false,
 		config:  cfg,
 	}

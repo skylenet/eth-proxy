@@ -1,5 +1,5 @@
 // websocketproxy.go is a modified version of https://github.com/koding/websocketproxy
-package proxy
+package execution
 
 import (
 	"encoding/json"
