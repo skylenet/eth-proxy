@@ -159,11 +159,13 @@ func (b *Backend) checkNodeVersion() (string, error) {
 	client := http.Client{
 		Timeout: 10 * time.Second,
 	}
-	resp, err := client.Get(fmt.Sprintf("%s/eth/v1/node/version", b.url.String()))
 
+	resp, err := client.Get(fmt.Sprintf("%s/eth/v1/node/version", b.url.String()))
 	if err != nil {
 		return "", err
 	}
+
+	defer resp.Body.Close()
 
 	r := struct {
 		Data struct {
@@ -189,6 +191,8 @@ func (b *Backend) checkNodeSyncing() (*SyncInfo, error) {
 		return nil, err
 	}
 
+	defer resp.Body.Close()
+
 	r := struct {
 		Data struct {
 			SyncInfo
@@ -212,6 +216,8 @@ func (b *Backend) checkNodePeerCount() (*PeerCountInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	defer resp.Body.Close()
 
 	// Some clients return the fields as int, others as strings, so we have to deal with both cases
 	r := struct {
