@@ -32,17 +32,19 @@ func NewProxy(conf *Config) *Proxy {
 
 	// build up beacon backends
 	p.beaconBackends = make(map[string]*beaconbackend.Backend)
-	beaconBackends := make([]*beaconbackend.Backend, len(conf.BeaconUpstreams))
+	beaconBackends := make([]*beaconbackend.Backend, len(conf.Beacon.BeaconUpstreams))
 
-	for i, b := range conf.BeaconUpstreams {
+	for i, b := range conf.Beacon.BeaconUpstreams {
 		u, err := url.Parse(b.Address)
 		if err != nil {
 			log.Fatalf("beacon upstream %s has an invalid url: %s (%v)", b.Name, b.Address, err)
 		}
 
 		be := beaconbackend.NewBackend(beaconbackend.Config{
-			URL:           u,
-			APIAllowPaths: conf.BeaconConfig.APIAllowPaths,
+			URL:                        u,
+			APIAllowPaths:              conf.Beacon.APIAllowPaths,
+			ProxyTimeoutSeconds:        conf.Beacon.ProxyTimeoutSeconds,
+			HealthCheckIntervalSeconds: conf.Beacon.HealthCheckIntervalSeconds,
 		})
 		p.beaconBackends[b.Name] = be
 		beaconBackends[i] = be
@@ -52,9 +54,9 @@ func NewProxy(conf *Config) *Proxy {
 
 	// build up execution backends
 	p.executionBackends = make(map[string]*executionbackend.Backend)
-	executionBackends := make([]*executionbackend.Backend, len(conf.ExecutionUpstreams))
+	executionBackends := make([]*executionbackend.Backend, len(conf.Execution.ExecutionUpstreams))
 
-	for i, b := range conf.ExecutionUpstreams {
+	for i, b := range conf.Execution.ExecutionUpstreams {
 		u, err := url.Parse(b.Address)
 		if err != nil {
 			log.Fatalf("execution upstream %s has an invalid url: %s (%v)", b.Name, b.Address, err)
@@ -66,9 +68,11 @@ func NewProxy(conf *Config) *Proxy {
 		}
 
 		be := executionbackend.NewBackend(executionbackend.Config{
-			URL:             u,
-			WebsocketURL:    wsu,
-			RPCAllowMethods: conf.ExecutionConfig.RPCAllowMethods,
+			URL:                        u,
+			WebsocketURL:               wsu,
+			RPCAllowMethods:            conf.Execution.RPCAllowMethods,
+			ProxyTimeoutSeconds:        conf.Execution.ProxyTimeoutSeconds,
+			HealthCheckIntervalSeconds: conf.Execution.HealthCheckIntervalSeconds,
 		})
 		p.executionBackends[b.Name] = be
 		executionBackends[i] = be
@@ -80,12 +84,12 @@ func NewProxy(conf *Config) *Proxy {
 }
 
 func (p *Proxy) Serve() error {
-	for _, upstream := range p.cfg.BeaconConfig.BeaconUpstreams {
+	for _, upstream := range p.cfg.Beacon.BeaconUpstreams {
 		endpoint := fmt.Sprintf("/proxy/beacon/%s/", upstream.Name)
 		http.HandleFunc(endpoint, p.beaconProxyRequestHandler(upstream.Name))
 	}
 
-	for _, upstream := range p.cfg.ExecutionConfig.ExecutionUpstreams {
+	for _, upstream := range p.cfg.Execution.ExecutionUpstreams {
 		endpoint := fmt.Sprintf("/proxy/execution/%s/", upstream.Name)
 		http.HandleFunc(endpoint, p.executionProxyRequestHandler(upstream.Name))
 	}
@@ -94,9 +98,9 @@ func (p *Proxy) Serve() error {
 	http.HandleFunc("/lb/execution/", p.executionLoadBalanceHandler())
 
 	http.HandleFunc("/status", p.statusRequestHandler())
-	log.WithField("listenAddr", p.cfg.ListenAddr).Info("started proxy server")
+	log.WithField("listenAddr", p.cfg.Global.ListenAddr).Info("started proxy server")
 
-	err := http.ListenAndServe(p.cfg.ListenAddr, nil)
+	err := http.ListenAndServe(p.cfg.Global.ListenAddr, nil)
 	if err != nil {
 		log.WithError(err).Fatal("can't start HTTP server")
 	}
