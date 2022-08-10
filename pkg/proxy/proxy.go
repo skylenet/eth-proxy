@@ -17,7 +17,8 @@ type Proxy struct {
 	beaconBackends    map[string]*beaconbackend.Backend
 	executionBackends map[string]*executionbackend.Backend
 
-	beaconLoadBalancer *beaconbackend.LoadBalancer
+	beaconLoadBalancer    *beaconbackend.LoadBalancer
+	executionLoadBalancer *executionbackend.LoadBalancer
 }
 
 func NewProxy(conf *Config) *Proxy {
@@ -31,7 +32,7 @@ func NewProxy(conf *Config) *Proxy {
 
 	// build up beacon backends
 	p.beaconBackends = make(map[string]*beaconbackend.Backend)
-	backends := make([]*beaconbackend.Backend, len(conf.BeaconUpstreams))
+	beaconBackends := make([]*beaconbackend.Backend, len(conf.BeaconUpstreams))
 	for i, b := range conf.BeaconUpstreams {
 		u, err := url.Parse(b.Address)
 		if err != nil {
@@ -42,13 +43,14 @@ func NewProxy(conf *Config) *Proxy {
 			APIAllowPaths: conf.BeaconConfig.APIAllowPaths,
 		})
 		p.beaconBackends[b.Name] = be
-		backends[i] = be
+		beaconBackends[i] = be
 	}
-	p.beaconLoadBalancer = beaconbackend.NewLoadBalancer(backends)
+	p.beaconLoadBalancer = beaconbackend.NewLoadBalancer(beaconBackends)
 
 	// build up execution backends
 	p.executionBackends = make(map[string]*executionbackend.Backend)
-	for _, b := range conf.ExecutionUpstreams {
+	executionBackends := make([]*executionbackend.Backend, len(conf.ExecutionUpstreams))
+	for i, b := range conf.ExecutionUpstreams {
 		u, err := url.Parse(b.Address)
 		if err != nil {
 			log.Fatalf("execution upstream %s has an invalid url: %s (%v)", b.Name, b.Address, err)
@@ -57,12 +59,15 @@ func NewProxy(conf *Config) *Proxy {
 		if err != nil {
 			log.Fatalf("execution upstream %s has an invalid websocket url: %s (%v)", b.Name, b.WsAddress, err)
 		}
-		p.executionBackends[b.Name] = executionbackend.NewBackend(executionbackend.Config{
+		be := executionbackend.NewBackend(executionbackend.Config{
 			URL:             u,
 			WebsocketURL:    wsu,
 			RPCAllowMethods: conf.ExecutionConfig.RPCAllowMethods,
 		})
+		p.executionBackends[b.Name] = be
+		executionBackends[i] = be
 	}
+	p.executionLoadBalancer = executionbackend.NewLoadBalancer(executionBackends)
 
 	return p
 }
@@ -79,6 +84,7 @@ func (p *Proxy) Serve() error {
 	}
 
 	http.HandleFunc("/lb/beacon/", p.beaconLoadBalanceHandler())
+	http.HandleFunc("/lb/execution/", p.executionLoadBalanceHandler())
 
 	http.HandleFunc("/status", p.statusRequestHandler())
 	log.WithField("listenAddr", p.cfg.ListenAddr).Info("started proxy server")
@@ -109,6 +115,13 @@ func (p *Proxy) executionProxyRequestHandler(upstreamName string) func(http.Resp
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.URL.Path = strings.ReplaceAll(r.URL.Path, fmt.Sprintf("/proxy/execution/%s", upstreamName), "")
 		p.executionBackends[upstreamName].ServeHTTP(w, r)
+	}
+}
+
+func (p *Proxy) executionLoadBalanceHandler() func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = strings.ReplaceAll(r.URL.Path, "/lb/execution/", "")
+		p.executionLoadBalancer.RoundRobin(w, r)
 	}
 }
 

@@ -102,6 +102,10 @@ func (b *Backend) URL() url.URL {
 	return *b.url
 }
 
+func (b *Backend) WeboscketURL() url.URL {
+	return *b.wsUrl
+}
+
 func (b *Backend) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	b.proxy(rw, req)
 }
