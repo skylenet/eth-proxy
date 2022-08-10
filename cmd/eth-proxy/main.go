@@ -5,7 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/skylenet/eth-proxy/pkg/proxy"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
@@ -17,7 +17,7 @@ var rootCmd = &cobra.Command{
 	Short: "Reverse proxy for ethereum nodes",
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := initCommon()
-		p := proxy.NewProxy(log, cfg)
+		p := proxy.NewProxy(cfg)
 		if err := p.Serve(); err != nil {
 			log.WithError(err).Fatal("failed to serve proxy server")
 		}
@@ -26,7 +26,6 @@ var rootCmd = &cobra.Command{
 
 var (
 	cfgFile string
-	log     = logrus.New()
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -62,7 +61,7 @@ func loadConfigFromFile(file string) (*proxy.Config, error) {
 }
 
 func initCommon() *proxy.Config {
-	log.SetFormatter(&logrus.TextFormatter{})
+	log.SetFormatter(&log.TextFormatter{})
 
 	log.WithField("cfgFile", cfgFile).Info("loading config")
 
@@ -71,9 +70,9 @@ func initCommon() *proxy.Config {
 		log.Fatal(err)
 	}
 
-	logLevel, err := logrus.ParseLevel(config.GlobalConfig.LoggingLevel)
+	logLevel, err := log.ParseLevel(config.Global.LoggingLevel)
 	if err != nil {
-		log.WithField("logLevel", config.GlobalConfig.LoggingLevel).Fatal("invalid logging level")
+		log.WithField("logLevel", config.Global.LoggingLevel).Fatal("invalid logging level")
 	}
 
 	log.SetLevel(logLevel)

@@ -84,6 +84,22 @@ curl -X POST 'http://localhost:5555/proxy/execution/node1/' \
 }'
 ```
 
+Load balance (round-robin) across nodes
+
+```sh
+# Beacon HTTP API
+curl -X GET 'http://localhost:5555/lb/beacon/eth/v1/node/identity'
+
+# Execution JSON RPC API
+curl -X POST 'http://localhost:5555/lb/execution/' \
+     --header 'Content-Type: application/json' --data-raw '{
+        "jsonrpc":"2.0",
+        "method":"eth_blockNumber",
+        "params":[],
+        "id":1
+}'
+```
+
 
 ### Building and running
 

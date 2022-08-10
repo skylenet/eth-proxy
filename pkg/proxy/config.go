@@ -3,9 +3,9 @@ package proxy
 import "fmt"
 
 type Config struct {
-	GlobalConfig    `yaml:"global"`
-	BeaconConfig    `yaml:"beacon"`
-	ExecutionConfig `yaml:"execution"`
+	Global    GlobalConfig    `yaml:"global"`
+	Beacon    BeaconConfig    `yaml:"beacon"`
+	Execution ExecutionConfig `yaml:"execution"`
 }
 
 type GlobalConfig struct {
@@ -14,15 +14,17 @@ type GlobalConfig struct {
 }
 
 type BeaconConfig struct {
-	BeaconUpstreams     []BeaconUpstream `yaml:"upstreams"`
-	APIAllowPaths       []string         `yaml:"apiAllowPaths"`
-	ProxyTimeoutSeconds uint             `yaml:"proxyTimeoutSeconds"`
+	BeaconUpstreams            []BeaconUpstream `yaml:"upstreams"`
+	APIAllowPaths              []string         `yaml:"apiAllowPaths"`
+	ProxyTimeoutSeconds        uint             `yaml:"proxyTimeoutSeconds"`
+	HealthCheckIntervalSeconds uint             `yaml:"healthCheckIntervalSeconds"`
 }
 
 type ExecutionConfig struct {
-	ExecutionUpstreams  []ExecutionUpstream `yaml:"upstreams"`
-	RPCAllowMethods     []string            `yaml:"rpcAllowMethods"`
-	ProxyTimeoutSeconds uint                `yaml:"proxyTimeoutSeconds"`
+	ExecutionUpstreams         []ExecutionUpstream `yaml:"upstreams"`
+	RPCAllowMethods            []string            `yaml:"rpcAllowMethods"`
+	ProxyTimeoutSeconds        uint                `yaml:"proxyTimeoutSeconds"`
+	HealthCheckIntervalSeconds uint                `yaml:"healthCheckIntervalSeconds"`
 }
 
 type BeaconUpstream struct {
@@ -40,7 +42,7 @@ func (c *Config) Validate() error {
 	// Check that all upstreams have different names and addresses
 	duplicates := make(map[string]struct{})
 
-	for _, u := range c.BeaconConfig.BeaconUpstreams {
+	for _, u := range c.Beacon.BeaconUpstreams {
 		if _, ok := duplicates[u.Name]; ok {
 			return fmt.Errorf("there's a duplicate upstream with the same name: %s", u.Name)
 		}
