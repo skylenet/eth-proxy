@@ -13,9 +13,11 @@ import (
 )
 
 type Proxy struct {
-	Cfg               Config
+	cfg               Config
 	beaconBackends    map[string]*beaconbackend.Backend
 	executionBackends map[string]*executionbackend.Backend
+
+	beaconLoadBalancer *beaconbackend.LoadBalancer
 }
 
 func NewProxy(conf *Config) *Proxy {
@@ -24,21 +26,25 @@ func NewProxy(conf *Config) *Proxy {
 	}
 
 	p := &Proxy{
-		Cfg: *conf,
+		cfg: *conf,
 	}
 
 	// build up beacon backends
 	p.beaconBackends = make(map[string]*beaconbackend.Backend)
-	for _, b := range conf.BeaconUpstreams {
+	backends := make([]*beaconbackend.Backend, len(conf.BeaconUpstreams))
+	for i, b := range conf.BeaconUpstreams {
 		u, err := url.Parse(b.Address)
 		if err != nil {
 			log.Fatalf("beacon upstream %s has an invalid url: %s (%v)", b.Name, b.Address, err)
 		}
-		p.beaconBackends[b.Name] = beaconbackend.NewBackend(beaconbackend.Config{
+		be := beaconbackend.NewBackend(beaconbackend.Config{
 			URL:           u,
 			APIAllowPaths: conf.BeaconConfig.APIAllowPaths,
 		})
+		p.beaconBackends[b.Name] = be
+		backends[i] = be
 	}
+	p.beaconLoadBalancer = beaconbackend.NewLoadBalancer(backends)
 
 	// build up execution backends
 	p.executionBackends = make(map[string]*executionbackend.Backend)
@@ -62,20 +68,22 @@ func NewProxy(conf *Config) *Proxy {
 }
 
 func (p *Proxy) Serve() error {
-	for _, upstream := range p.Cfg.BeaconConfig.BeaconUpstreams {
+	for _, upstream := range p.cfg.BeaconConfig.BeaconUpstreams {
 		endpoint := fmt.Sprintf("/proxy/beacon/%s/", upstream.Name)
 		http.HandleFunc(endpoint, p.beaconProxyRequestHandler(upstream.Name))
 	}
 
-	for _, upstream := range p.Cfg.ExecutionConfig.ExecutionUpstreams {
+	for _, upstream := range p.cfg.ExecutionConfig.ExecutionUpstreams {
 		endpoint := fmt.Sprintf("/proxy/execution/%s/", upstream.Name)
 		http.HandleFunc(endpoint, p.executionProxyRequestHandler(upstream.Name))
 	}
 
-	http.HandleFunc("/status", p.statusRequestHandler())
-	log.WithField("listenAddr", p.Cfg.ListenAddr).Info("started proxy server")
+	http.HandleFunc("/lb/beacon/", p.beaconLoadBalanceHandler())
 
-	err := http.ListenAndServe(p.Cfg.ListenAddr, nil)
+	http.HandleFunc("/status", p.statusRequestHandler())
+	log.WithField("listenAddr", p.cfg.ListenAddr).Info("started proxy server")
+
+	err := http.ListenAndServe(p.cfg.ListenAddr, nil)
 	if err != nil {
 		log.WithError(err).Fatal("can't start HTTP server")
 	}
@@ -87,6 +95,13 @@ func (p *Proxy) beaconProxyRequestHandler(upstreamName string) func(http.Respons
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.URL.Path = strings.ReplaceAll(r.URL.Path, fmt.Sprintf("/proxy/beacon/%s", upstreamName), "")
 		p.beaconBackends[upstreamName].ServeHTTP(w, r)
+	}
+}
+
+func (p *Proxy) beaconLoadBalanceHandler() func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = strings.ReplaceAll(r.URL.Path, "/lb/beacon", "")
+		p.beaconLoadBalancer.RoundRobin(w, r)
 	}
 }
 
