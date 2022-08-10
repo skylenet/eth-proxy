@@ -25,7 +25,7 @@ const defaultHealthCheckIntervalSeconds uint = 30
 type Backend struct {
 	mu      sync.RWMutex
 	url     *url.URL
-	wsUrl   *url.URL
+	wsURL   *url.URL
 	isAlive bool
 
 	proxy             func(http.ResponseWriter, *http.Request)
@@ -54,13 +54,14 @@ func NewBackend(cfg Config) *Backend {
 	if cfg.HealthCheckIntervalSeconds == 0 {
 		cfg.HealthCheckIntervalSeconds = defaultHealthCheckIntervalSeconds
 	}
+
 	if cfg.ProxyTimeoutSeconds == 0 {
 		cfg.ProxyTimeoutSeconds = defaultUpstreamTimeoutSeconds
 	}
 
 	b := Backend{
 		url:     cfg.URL,
-		wsUrl:   cfg.WebsocketURL,
+		wsURL:   cfg.WebsocketURL,
 		isAlive: false,
 		config:  cfg,
 	}
@@ -73,6 +74,7 @@ func NewBackend(cfg Config) *Backend {
 
 	go func() {
 		b.Check()
+
 		for {
 			select {
 			case <-done:
@@ -89,12 +91,14 @@ func NewBackend(cfg Config) *Backend {
 func (b *Backend) IsAlive() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+
 	return b.isAlive
 }
 
 func (b *Backend) Status() *Status {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+
 	return &b.status
 }
 
@@ -103,7 +107,7 @@ func (b *Backend) URL() url.URL {
 }
 
 func (b *Backend) WeboscketURL() url.URL {
-	return *b.wsUrl
+	return *b.wsURL
 }
 
 func (b *Backend) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
@@ -227,7 +231,7 @@ func (b *Backend) checkNodePeerCount() (uint64, error) {
 
 func (b *Backend) proxyHandler() func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("upgrade") == "websocket" && b.wsUrl != nil {
+		if r.Header.Get("upgrade") == "websocket" && b.wsURL != nil {
 			b.handleWebsocket(w, r)
 		} else {
 			b.handleHTTP(w, r)
@@ -237,6 +241,7 @@ func (b *Backend) proxyHandler() func(http.ResponseWriter, *http.Request) {
 
 func (b *Backend) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.WithError(err).Error("failed reading rpc body")
@@ -287,7 +292,7 @@ func (b *Backend) handleHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b *Backend) handleWebsocket(w http.ResponseWriter, r *http.Request) {
-	wsp := NewWebsocketProxy(b.wsUrl, NewRPCWebsocketMessageProcessor(b.rpcMethodsMatcher))
+	wsp := NewWebsocketProxy(b.wsURL, NewRPCWebsocketMessageProcessor(b.rpcMethodsMatcher))
 	wsp.ServeHTTP(w, r)
 }
 

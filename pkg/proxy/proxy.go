@@ -33,11 +33,13 @@ func NewProxy(conf *Config) *Proxy {
 	// build up beacon backends
 	p.beaconBackends = make(map[string]*beaconbackend.Backend)
 	beaconBackends := make([]*beaconbackend.Backend, len(conf.BeaconUpstreams))
+
 	for i, b := range conf.BeaconUpstreams {
 		u, err := url.Parse(b.Address)
 		if err != nil {
 			log.Fatalf("beacon upstream %s has an invalid url: %s (%v)", b.Name, b.Address, err)
 		}
+
 		be := beaconbackend.NewBackend(beaconbackend.Config{
 			URL:           u,
 			APIAllowPaths: conf.BeaconConfig.APIAllowPaths,
@@ -45,20 +47,24 @@ func NewProxy(conf *Config) *Proxy {
 		p.beaconBackends[b.Name] = be
 		beaconBackends[i] = be
 	}
+
 	p.beaconLoadBalancer = beaconbackend.NewLoadBalancer(beaconBackends)
 
 	// build up execution backends
 	p.executionBackends = make(map[string]*executionbackend.Backend)
 	executionBackends := make([]*executionbackend.Backend, len(conf.ExecutionUpstreams))
+
 	for i, b := range conf.ExecutionUpstreams {
 		u, err := url.Parse(b.Address)
 		if err != nil {
 			log.Fatalf("execution upstream %s has an invalid url: %s (%v)", b.Name, b.Address, err)
 		}
+
 		wsu, err := url.Parse(b.WsAddress)
 		if err != nil {
 			log.Fatalf("execution upstream %s has an invalid websocket url: %s (%v)", b.Name, b.WsAddress, err)
 		}
+
 		be := executionbackend.NewBackend(executionbackend.Config{
 			URL:             u,
 			WebsocketURL:    wsu,
@@ -67,6 +73,7 @@ func NewProxy(conf *Config) *Proxy {
 		p.executionBackends[b.Name] = be
 		executionBackends[i] = be
 	}
+
 	p.executionLoadBalancer = executionbackend.NewLoadBalancer(executionBackends)
 
 	return p

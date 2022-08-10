@@ -60,6 +60,7 @@ func NewBackend(cfg Config) *Backend {
 	if cfg.HealthCheckIntervalSeconds == 0 {
 		cfg.HealthCheckIntervalSeconds = defaultHealthCheckIntervalSeconds
 	}
+
 	if cfg.ProxyTimeoutSeconds == 0 {
 		cfg.ProxyTimeoutSeconds = defaultUpstreamTimeoutSeconds
 	}
@@ -78,6 +79,7 @@ func NewBackend(cfg Config) *Backend {
 
 	go func() {
 		b.Check()
+
 		for {
 			select {
 			case <-done:
@@ -94,12 +96,14 @@ func NewBackend(cfg Config) *Backend {
 func (b *Backend) IsAlive() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+
 	return b.isAlive
 }
 
 func (b *Backend) Status() *Status {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+
 	return &b.status
 }
 

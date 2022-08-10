@@ -285,9 +285,9 @@ type RPCWebsocketMessageProcessor struct {
 	executionRPCMethodsMatcher matcher.Matcher
 }
 
-func NewRPCWebsocketMessageProcessor(matcher matcher.Matcher) *RPCWebsocketMessageProcessor {
+func NewRPCWebsocketMessageProcessor(m matcher.Matcher) *RPCWebsocketMessageProcessor {
 	return &RPCWebsocketMessageProcessor{
-		executionRPCMethodsMatcher: matcher,
+		executionRPCMethodsMatcher: m,
 	}
 }
 
